@@ -16,14 +16,8 @@ from os import stat
 from math import ceil
 from json import dumps as jsonEncode
 from sys import stdout
+from simulationConfig import *
 
-#SERVER_IP   = '127.0.0.1' 		# Local Host
-SERVER_IP  = '137.189.97.35'  	# lab.neP2P.com
-#SERVER_IP  = '54.248.144.148' 	# AWS Ubuntu Server
-SERVER_PORT = 39951				# 39951 - 40000
-LOG_PORT    = 49999
-MAX_PKT_SIZE   = 1000 			#  MAX_PKT_SIZE = MAX_DATA - 4 = 1000
-MAX_BLOCK_SIZE = 1000000
 TIME_CHECK_PERIOD = 3
 strTime = time()
 pktNum  = 0
@@ -109,8 +103,8 @@ class logClient:
 		print 'status: [', self.status, ']'
 
 	#def printShortLong(self):
-         #       print 'Client at {}:'.format(self.srcAddr)
-          #      pss
+        #       print 'Client at {}:'.format(self.srcAddr)
+        #       pass
                 #print 'time={}'.format((self.endTime-self.))
 
 	def convertDic(self):
@@ -130,11 +124,12 @@ class logClient:
 		return dic
 
 	def sendLog(self, skt):
+		self.endTimePt = time()
 		#self.printLog()
 		skt.sendto(jsonEncode(self.convertDic()), self.logAddr)
 
 class rudpClient:
-	def __init__(self, srcPort, logAddr = ('127.0.0.1', LOG_PORT)):
+	def __init__(self, srcPort, logAddr = (LOG_IP, LOG_PORT)):
 		self.skt = socket(AF_INET, SOCK_DGRAM) #UDP
 		self.skt.bind(('', srcPort)) #used for recv
 		self.log = logClient(self.skt.getsockname(), None, logAddr)
@@ -185,9 +180,8 @@ class rudpClient:
 		self.skt.settimeout(RTO)
 		try:
 			self.srs( rudpPacket(SYN, self.conn.pktId) )
-		except Exception as e:
-			print e.message
-			self.log.endTimePt = time()
+		except:
+			print 'fail'
 			self.log.sendLog(self.skt)
 			return False
 		return True
@@ -207,8 +201,6 @@ class rudpClient:
 			try:
 				sendPkt = self.srs( sendPkt )
 			except Exception as e:
-				print e.message
-				self.log.endTimePt = time()
 				self.log.sendLog(self.skt)
 				return False
 		return True
@@ -220,14 +212,12 @@ class rudpClient:
 		try:
 			self.srs( sendPkt )
 		except END_CONNECTION:
-			self.log.endTimePt = time()
 			self.log.status = True
 			self.log.sendLog(self.skt)
 			del self.conn
 			return True
 		except Exception as e:
 			print e.message
-			self.log.endTimePt = time()
 			self.log.sendLog(self.skt)
 			return False
 		

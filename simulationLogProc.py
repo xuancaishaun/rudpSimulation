@@ -1,8 +1,8 @@
 from socket import *
 from json import loads as jsonDecode
 from threading import Timer
+from simulationConfig import *
 
-LOG_PORT = 49999	# this port is used to get logging information from every client
 
 class Logger:
 	def __init__(self):

@@ -42,8 +42,6 @@ MAX_DATA  = 1004
 MAX_RESND = 3
 RTO       = 3       #The retransmission time period
 END_WAIT  = 10      #Close Connection
-SDR_PORT  = 50007
-RCV_PORT  = 50008	# 50000-50010	
 #-------------------#
 # Constants         #
 #-------------------#

@@ -1,6 +1,6 @@
 from simulationRudpUserDev import *
 
-server = rudpServer(RCV_PORT)
+server = rudpServer(SERVER_PORT)
 print '-------------------------Testing (Server)---------------------\n'
 print '==> Server is created.\n'
 

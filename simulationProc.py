@@ -4,15 +4,12 @@ import subprocess
 from threading import Timer
 from os import getcwd
 from sys import platform
+from sys import stdout
+from simulationConfig import *
 
 #-------------------#
 # Configuration     #
 #-------------------#
-MEAN_INT_ARRIVAL = 5	# inver-arrival time between two clients
-MEAN_JOB_SIZE = 10240	# average of data length = 15000 bytes, 15 packets if MAX_PKT_SIZE = 1000
-STD_JOB_SIZE = 1024	# standard deviation of data length = 5000 bytes
-BASE_PORT = 50020	# Port range: [BASE_PORT, BASE_PORT + MAX_PORT]
-MAX_PORT = 1000 	# Max clients supported: MAX_PORT
 REFRESH_PERIOD = 3
 BASE_PATH = getcwd()
 isWindows = (platform == 'win32')
@@ -52,9 +49,9 @@ class Counter:
 		self.avg_jobSize = (self.avg_jobSize * (self.num_client - 1) + jobSize) / self.num_client
 		
 	def printCounter(self):
-		info = 'Total C:{0}({1}/sec), '.format(self.num_client, int(self.num_client/(time() - self.startTime)*1000)/float(1000))
+		info = '\n\nTotal C:{0}({1}/sec), '.format(self.num_client, int(self.num_client/(time() - self.startTime)*1000)/float(1000))
 		info += 'InterArrival: {0}/{1}/{2}(min,max,avg), '.format(int(self.min_interArrivalTime*1000)/float(1000), int(self.max_interArrivalTime*100)/float(100), int(self.avg_interArrivalTime*100)/float(100))
-		info += 'JobSize: {0}/{1}/{2}(min,max,avg)'.format(self.min_jobSize, self.max_jobSize, self.avg_jobSize)
+		info += 'JobSize: {0}/{1}/{2}(min,max,avg)\n'.format(self.min_jobSize, self.max_jobSize, self.avg_jobSize)
 		print info
 		pass
 
@@ -116,7 +113,10 @@ class Simulator:
 					cmd = "\"{0}\simulationClient.py\" {1} {2}".format(BASE_PATH, next_port, next_jobSize)
 				else:
 					cmd = "python \"{0}/simulationClient.py\" {1} {2}".format(BASE_PATH, next_port, next_jobSize)
-				print cmd					
+				#print cmd					
+				stdout.write('^o^ ')
+				stdout.flush()
+				
 				proc_client = subprocess.Popen([cmd], shell = True)
 				self.sys_state.addClient(proc_client)
 				self.sys_state.usePort(next_port)
