@@ -1,12 +1,12 @@
 # Configuration for Sending Terminal
-MAX_SND_PEER = 100
+MAX_SND_PEER = 1
 
-MIN_SND_PORT_NUM = 50001
-MAX_SND_PORT_NUM = MIN_SND_PORT_NUM + 2*MAX_SND_PEER
+MIN_SND_PORT_NUM = 50000
+MAX_SND_PORT_NUM = MIN_SND_PORT_NUM + 2 * MAX_SND_PEER
 
-MAX_SND_PKT_SIZE = 10240# in bytes => 10 KB, upper bound for packet size
-AVG_SND_PKT_NUM  = 100	# Average no. of packets to send for each peer
-STD_SND_PKT_NUM  = 50	# Standard deviation of no. of packets to send for each peer
+MAX_SND_PKT_DATA = 'o' * 1024# in bytes => 10 KB, upper bound for packet size
+AVG_SND_PKT_NUM  = 1	# Average no. of packets to send for each peer
+STD_SND_PKT_NUM  = 0	# Standard deviation of no. of packets to send for each peer
 
 AVG_SND_RATE = 100	# No. of packets sent per second;
 			# Switching interval follows exponential distribution
@@ -26,14 +26,19 @@ Readme for Sending Terminal
 '''
 
 # Configuration for The Target Peer
-MAX_RCV_PEER = 100
+TARGET_PEER_PORT = 39951
+TARGET_PEER_IP	 = '127.0.0.1'
 
-MIN_RCV_PORT_NUM = 60001
-MAX_RCV_PORT_NUM = MIN_RCV_PORT_NUM + 2*MAX_RCV_PEER
 
-MAX_RCV_PKT_SIZE = 10240
-AVG_RCV_PKT_NUM  = 100
-STD_SND_PKT_NUM  = 50
+RCV_Terminal_IP	 = '127.0.0.1'
+MAX_RCV_PEER 	 = 1
+
+MIN_RCV_PORT_NUM = 60000
+MAX_RCV_PORT_NUM = MIN_RCV_PORT_NUM + 2 * MAX_RCV_PEER
+
+MAX_RCV_PKT_DATA = '*' * 1024
+AVG_RCV_PKT_NUM  = 1
+STD_SND_PKT_NUM  = 0
 
 AVG_RCV_RATE = 100
 
