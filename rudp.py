@@ -7,10 +7,6 @@
 #-------------------------------------#
 #   rudp module                       #
 #-------------------------------------#
-from socket import *
-from struct import pack, unpack
-from time import time 
-from rudpException import *
 
 #       8 BYTES    4 BYTES     MAX:1000BYTE
 #      +----------+-----------+-------------+
@@ -19,142 +15,195 @@ from rudpException import *
 
 #BIT:   0         8       16       24     31
 #      +-+-------+--------+--------+--------+
-#      |0| TYPE  |       SEQ / ACK          |
+#      |0| FLAG  |       DAT / ACK          |
 #      +-+-------+--------+--------+--------+
 #      |                DATA                |
 #      |                                    |
 #      |                ....                |
 #      +------------------------------------+
 
-#      TYPE: _ _ _ _ _ _ _ 7 bits, each bit is either 0 or 1
-#            S A F D S A A
-#            Y C I A Y C C
-#            N K N T N K K
-#                    + + +
-#                    A D F
-#                    C A I
-#                    K T N
+#      FLAG: _ _ _ _ _ _ _ 7 bits, each bit is either 0 or 1
+#            D A         R
+#            A C         E
+#            T K         L
 
 #-------------------#
-# Constants         #
+# Libraries         #
+#-------------------#
+from gevent.socket import *
+from rudpException import *
+from struct import pack, unpack
+from gevent import sleep, spawn
+from gevent.pool import Pool
+from time import time
+from Queue import Queue
+from Queue import Empty as QEmpty
+from collections import OrderedDict as oDict
+#-------------------#
+# RUDP Constants    #
 #-------------------#
 MAX_DATA  = 1004
 MAX_RESND = 3
-RTO       = 3       #The retransmission time period
-END_WAIT  = 10      #Close Connection
-#-------------------#
-# Constants         #
-#-------------------#
-SYN       = 0x40000000
-ACK       = 0x20000000
-FIN       = 0x10000000
-DAT       = 0x08000000
-SYN_ACK   = 0x04000000
-ACK_DAT   = 0x02000000
-FIN_ACK   = 0x01000000
+RTO       = 1       #The retransmission time period
+SDR_PORT  = 50007
+RCV_PORT  = 50008	# 50000-50010
 MAX_PKTID = 0xffffff
+MAX_CONN  = 1000
+ACK_LMT   = 100
+DAT = 0x40000000
+ACK = 0x20000000
+REL = 0x01000000
 	
 #-------------------#
 # RUDP              #
 #-------------------#
-def rudpPacket(pktType = None, pktId = None, data = ''):
-	return {'pktType': pktType, 'pktId': pktId, 'data': data}
-#-------------------#
-# RUDP Server       #
-#-------------------#
-def processSYN(rudpPkt, c):
-	if SYN in c.accept:
-		if c.wait == SYN: c.accept += [DAT, FIN]
-		c.pktId = rudpPkt['pktId'] + 1
-		c.wait  = DAT
-		c.time  = time()
-		return rudpPacket(SYN_ACK, c.pktId)
-	raise WRONG_PKT('processSYN', rudpPkt)
-def processDAT(rudpPkt, c):
-	if DAT == c.wait:
-		if rudpPkt['pktId'] == c.pktId:
-			if SYN in c.accept: c.accept.remove(SYN)
-			c.pktId += 1
-			c.data  += rudpPkt['data']
-			c.time   = time() 
-			return rudpPacket(ACK, c.pktId)
-		elif rudpPkt['pktId'] == c.pktId - 1: 
-			c.time   = time()
-			return rudpPacket(ACK, c.pktId)
-		elif rudpPkt['pktId'] < c.pktId - 1: raise WRONG_PKT('processDAT [Duplicated]', rudpPkt) # Bugs
-	raise WRONG_PKT('processDAT', rudpPkt)
-def processFIN(rudpPkt, c):
-	if FIN in c.accept and rudpPkt['pktId'] == c.pktId:
-		if DAT in c.accept: c.accept.remove(DAT)
-		c.wait = FIN
-		c.time = time()
-		return rudpPacket(FIN_ACK, c.pktId + 1)
-	raise WRONG_PKT('processFIN', rudpPkt)
-#-------------------#
-# RUDP Client       #
-#-------------------#
-def processSYN_ACK(rudpPkt, c):
-	if SYN_ACK == c.wait and rudpPkt['pktId'] == c.pktId + 1:
-		c.wait = ACK
-		c.pktId += 1
-		return rudpPacket(DAT, c.pktId)
-	raise WRONG_PKT('processSYN_ACK', rudpPkt)
-def processACK(rudpPkt, c):
-	if ACK == c.wait and rudpPkt['pktId'] == c.pktId + 1:
-		c.pktId += 1
-		return rudpPacket(DAT, c.pktId)
-	raise WRONG_PKT('processACK', rudpPkt)
-def processFIN_ACK(rudpPkt, c):
-	if FIN_ACK == c.wait and rudpPkt['pktId'] == c.pktId + 1:
-		c.pktId += 1
-		raise END_CONNECTION(c)
-	raise WRONG_PKT('processFIN_ACK', rudpPkt)
+def rudpPacket(pktType = None, pktId = 0, isReliable = True, data = ''):
+	return {'type': pktType, 'rel': isReliable, 'id': pktId, 'data': data}
 
-#rudpProcessSwitch[rudpPkt['pktType']](rudpPkt, c) <-- how you use process functions
-rudpProcessSwitch = {SYN: processSYN, SYN_ACK: processSYN_ACK, DAT: processDAT, ACK: processACK, FIN: processFIN, FIN_ACK: processFIN_ACK}
 #-------------------#
 # Protocol codec    #
 #-------------------#
 def encode(rudpPkt): #pktId can be either ACK # or SEQ #
-    if rudpPkt['pktId'] <= MAX_PKTID:
-        header = rudpPkt['pktType'] | rudpPkt['pktId']
-        return pack('i', header) + rudpPkt['data']
-    raise ENCODE_DATA_FAIL()
+	if rudpPkt['id'] <= MAX_PKTID:
+		header = rudpPkt['type'] | rudpPkt['id'] | REL if rudpPkt['rel'] else rudpPkt['type'] | rudpPkt['id']
+		return pack('i', header) + rudpPkt['data']
+	raise ENCODE_DATA_FAIL()
 
 def decode(bitStr):
-    if len(bitStr) < 4:
-        raise DECODE_DATA_FAIL()
-    else:
-	    header  = unpack('i', bitStr[:4])[0]
-	    return rudpPacket(header & 0x7f000000, header & 0x00ffffff, bitStr[4:])
+	if len(bitStr) < 4:
+		raise DECODE_DATA_FAIL()
+	else:
+		header  = unpack('i', bitStr[:4])[0]
+		return rudpPacket(header & 0x70000000, header & 0x00ffffff, header & REL, bitStr[4:])
 
 #-------------------#
-# RUDP Connection   #
+# RUDP Socket       #
 #-------------------#
-class rudpConnection():
-	def __init__(self, destAddr, isClient):
-		self.destAddr = destAddr
-		self.wait     = SYN_ACK if isClient else SYN
-		self.pktId    = 0
-		if not isClient: 
-			self.accept = [SYN] #[SYN, DAT, FIN]
-			self.time   = 0
-			self.data   = ''
-    
-    	def checkTime(self, time):
-    		if time - self.time > END_WAIT:
-    			return False
-    		return True
+class rudpSocket():
+	def __init__(self, srcPort):
+	#UDP socket
+		self.skt  = socket(AF_INET, SOCK_DGRAM) #UDP
+		self.skt.bind(('', srcPort)) 			#used for recv
+	#receivers, senders and ACK waiting list
+		self.expId 		= oDict()				#destAddr => a list of acceptable pktId
+		self.nextId 	= oDict()				#destAddr => lastPktId
+		self.notACKed 	= oDict()				#(pktId, destAddr) => (timestamp, resendNum, sendPkt)
+	#coroutine
+		spawn(self.recvLoop)
+		spawn(self.ackLoop)
+		sleep()
+	#packet Buffer
+		self.datPkts   = Queue()
+	def __del__(self):
+		self.skt.close()
 
-	def printConnection(self):
-		print '[RUDP Connection]'
-		print '\tdestAddr:', self.destAddr
-		print '\tpktId   :', self.pktId
-		print '\twait    :', self.wait
+	def recvLoop(self):
+		while True:
+			data, addr = self.skt.recvfrom(MAX_DATA)
+			try:
+				recvPkt = decode(data)
+			#type
+				if recvPkt['type'] == DAT: self.proDAT(recvPkt, addr)
+				elif recvPkt['type'] == ACK: self.proACK(recvPkt, addr)
+				else: continue
+			except Exception as e:
+				print e.message
+			sleep(0)
+
+	def ackLoop(self):
+		while True:
+			curTime	= time()
+			timeToWait = 0
+		#pop from left: key = (pktId, destAddr) => value = (timestamp, resendNum, sendPkt)
+			for key, triple in self.notACKed.iteritems():
+				timeToWait = curTime - triple[0]
+				if timeToWait < 3: break
+				else:
+					triple[0] = curTime
+				#update resendNum
+					triple[1] += 1
+					if triple[1] == 3: 
+						del self.notACKed[key]
+						raise MAX_RESND_FAIL(key[1])
+				#put this to the end
+					self.notACKed[key] = self.notACKed.pop(key)
+				#resendPkt
+					self.skt.sendto( encode(triple[2]), key[1] )
+			#print 'ackLoop end', timeToWait
+			sleep(timeToWait)
+
+	def proDAT(self, recvPkt, addr):
+	#not rel
+		if not recvPkt['rel']: self.datPkts.put((recvPkt, addr))
+	#rel
+		else:
+			isReturn = True
+			try:
+			#id
+				pktId, expIdList = recvPkt['id'], self.expId[addr]
+			except KeyError:
+				pktId = recvPkt['id']
+			#initiate + replacement
+				if pktId == 0:
+					if len(self.expId) == MAX_CONN: self.expId.popitem(False)
+					self.expId[addr] = [1]
+				else: return
+			else:
+				try:
+				#reset
+					if pktId == 0: self.expId[addr] = [1]
+				#normal	
+					elif pktId == expIdList[-1]: expIdList[-1] += 1
+				#lost packets received
+					else: expIdList.remove(pktId) # => ValueError
+				except ValueError as e:
+					print e.message
+				#shutdown
+					if pktId == MAX_PKTID: del self.expId[addr]
+				#packet loss
+					elif pktId > expIdList[-1]:
+						expIdList.extend( range(expIdList[-1] + 1, pktId) )
+						expIdList.append( pktId + 1 )
+				#duplicate packets
+					else: isReturn = False
+		#ACK Packet
+			sendPkt = rudpPacket(ACK, pktId + 1)
+			self.skt.sendto( encode(sendPkt), addr )
+			if isReturn: self.datPkts.put((recvPkt, addr))
+
+
+	def proACK(self, recvPkt, addr):
 		try:
-			print '\taccept  :', self.accep
-			print '\ttime    :', self.time
-			print '\tdata    :', self.data
-		except:
-			print 'NOT VALID'
+			del self.notACKed[(recvPkt['id'], addr)]
+		except KeyError: return 
+
+
+
+	#Assumption: you cannot send to different destinations concurrently
+	def sendto(self, string, destAddr, isReliable = False): #destAddr = (destIP, destPort)
+		if len(string) > MAX_DATA: return None
+	#not reliable
+		if not isReliable: return self.skt.sendto( encode(rudpPacket(DAT, 0, isReliable, string)), destAddr )
+	#reliable
+		try:
+			nextId = self.nextId[destAddr]
+		except KeyError:
+			if len(self.nextId) == MAX_CONN: self.nextId.popitem(False)
+			self.nextId[destAddr], nextId = 0, 0
+	#pkt
+		sendPkt = rudpPacket(DAT, nextId, isReliable, string)
+	#send pkt
+		ret = self.skt.sendto( encode(sendPkt), destAddr )
+		self.nextId[destAddr] += 1
+	#ACK oDict
+		#print 'Looking forward ACK'
+		self.notACKed[(nextId + 1, destAddr)] = [time(), 0, sendPkt]
+		return ret
+
+	def recvfrom(self):
+		try:
+			recvPkt, addr = self.datPkts.get_nowait() #Non-blocking
+			print recvPkt
+		except QEmpty: raise NO_RECV_DATA()
+		return recvPkt['data'], addr
 
