@@ -4,93 +4,46 @@ from testConfig import *
 from collections import OrderedDict
 from sys import stdout, argv
 from random import random, expovariate, gauss, randint
-from gevent import sleep
-
-
-class rudpSocketDev(rudpSocket):
-	def initPktCount(self, pktCount):
-		self.pktCount = pktCount
-
-	def sendtoDev(self, destAddr):
-		if self.pktCount == 0:
-			return False
-		else:
-			self.pktCount = self.pktCount - 1
-			try:
-				self.sendto(MAX_SND_PKT_DATA, destAddr, isReliable = True)
-				return True
-			except Exception as e:
-				raise Exception
-			#	print e.message
 
 class SNDTerminal():
 	def __init__(self):
-		self.sndFreePortDict = OrderedDict()
-		self.sndBusyPortDict = OrderedDict()
-		for i in xrange(MIN_SND_PORT_NUM, MAX_SND_PORT_NUM):
-			self.sndFreePortDict[str(i)] = 1	# 1 => dunmy value
-		self.sndPeerList  = []
+		self.sndPeerList = []
+		self.pktSentCount = (0, 0, 0) # min/avg/max
 
 	def start(self):
-		print '==> Creating {0} sending peers'.format(MAX_SND_PEER)
-		while len(self.sndPeerList) < MAX_SND_PEER:
-			try: (nextFreePort, nonsense) = self.sndFreePortDict.popitem(last = False)
-			except KeyError:
-				print '\t Error: no free port'
-
-			newPeer = rudpSocketDev(int(nextFreePort))
-			self.sndBusyPortDict[str(nextFreePort)] = 0	# add nextFreePort to sndBusyPortDict
-			newPeer.portNum = nextFreePort
-			newPeer.initPktCount(int(abs(gauss(AVG_RCV_PKT_NUM, STD_SND_PKT_NUM))))
-			self.sndPeerList.append(newPeer)
-
-		print '==> Start sending data to target peer'
+		for i in range(MIN_SND_PORT_NUM, MIN_SND_PORT_NUM + MAX_SND_PEER):
+			newSndPeer = rudpSocket(i)
+			newSndPeer.pktCount = int(abs(gauss(AVG_SND_PKT_NUM, STD_SND_PKT_NUM)))
+			# normal distribution
+			self.sndPeerList.append(newSndPeer)
 
 		while True:
-			peerToSendId = randint(0, len(self.sndPeerList) - 1)
-			try: peerToSend = self.sndPeerList[peerToSendId]
-			except IndexError:
-				print '\t---> no peer to send'
-				continue
-			if not peerToSend.sendtoDev((TARGET_PEER_IP, TARGET_PEER_PORT)):
-				# pktCount = 0 or sendto() failure
-				# this peer has done its job
-				self.sndPeerList.pop(peerToSendId)	###
-				freedPort = peerToSend.portNum
-				peerToSend.__del__()
-				try: self.sndBusyPortDict.pop(freedPort);  ###
-				except KeyError:
-					print '\t Error: fail to free port'
-				self.sndFreePortDict[str(freedPort)] = 1	###
-
-				# Creat a new peer
-				try: (nextFreePort, nonsense) = self.sndFreePortDict.popitem(last = False) ###
-				except KeyError:
-					print '\t Error: no free port'
-				newPeer = rudpSocketDev(int(nextFreePort))
-				self.sndBusyPortDict[str(nextFreePort)] = 0		###
-				newPeer.portNum = nextFreePort
-				newPeer.initPktCount(int(abs(gauss(AVG_RCV_PKT_NUM, STD_SND_PKT_NUM))))
-				self.sndPeerList.append(newPeer)	###
-			else: 
-				print peerToSend.pktCount, peerToSend.notACKed
-			sleep(3)
-
+			if len(self.sndPeerList) != 0:
+				peerIdx = randint(0, len(self.sndPeerList) - 1)
+				# uniform distribution
+				if self.sndPeerList[peerIdx].pktCount == 0:
+					self.sndPeerList.pop(peerIdx)
+				else:
+					self.sndPeerList[peerIdx].sendto(MAX_SND_PKT_DATA, (TARGET_PEER_IP, TARGET_PEER_PORT), True)
+					self.sndPeerList[peerIdx].pktCount -= 1
+					stdout.write('~')
+					stdout.flush()
+			else:
+				break
+			sleep(expovariate(AVG_SND_RATE))
+			# exponential distribution.
+		print 'Sending OK'
 
 class RCVTerminal():
 	def __init__(self):
-		self.rcvPortDict = OrderedDict()
-		for i in xrange(MIN_SND_PORT_NUM, MAX_SND_PORT_NUM):
-			self.rcvPortDict[str(i)] = 1	# 1 => available port
 		self.rcvPeerList = []
 
 	def start(self):
-		print '==> Creating {0} receiving peers from Port {1} to {2}'.format(MAX_RCV_PORT_NUM - MIN_RCV_PORT_NUM, MIN_RCV_PORT_NUM, MAX_RCV_PORT_NUM - 1) 
+		print '==> Creating {0} receiving peers'.format(MAX_RCV_PEER) 
 		print '==> RCV Terminal @ {0}\n'.format(RCV_Terminal_IP)
-		while len(self.rcvPeerList) < (MAX_RCV_PORT_NUM - MIN_RCV_PORT_NUM):
-			(nextPortNum, nonsense) = self.rcvPortDict.popitem(last = False)
-			newPeer = rudpSocketDev(int(nextPortNum))
-			self.rcvPeerList.append(newPeer)
+		for i in range(MIN_RCV_PORT_NUM, MAX_RCV_PORT_NUM + 1):
+			newRcvPeer = rudpSocket(i)
+			self.rcvPeerList.append(newRcvPeer)
 
 		while True:
 			try:
@@ -98,68 +51,65 @@ class RCVTerminal():
 					try: 
 						recvData, addr = self.rcvPeerList[i].recvfrom()
 						stdout.write('o')
-					except NO_RECV_DATA:
-						pass
+						stdout.flush()
+					except NO_RECV_DATA: continue
 			except KeyboardInterrupt:
 				return
-				
-				
+			sleep(0)
+							
 
 class TargetPeer():	
 	def __init__(self):
-		self.destPortDict = OrderedDict()
-		for i in xrange(MIN_SND_PORT_NUM, MAX_SND_PORT_NUM):
-			self.destPortDict[str(i)] = 1	# 1 => dunmy value
-		self.pktCountDict = OrderedDict()
-		self.activePortList = []
+		self.pktCountDict = dict()
+		self.destPortList = []
+		self.targetPeer = rudpSocket(TARGET_PEER_PORT)
+
+	def rcvLoop(self):
+		while True:
+			try: 
+				recvData, addr = self.targetPeer.recvfrom()
+				stdout.write('o')
+				stdout.flush()
+				sleep(0.0001)
+			except NO_RECV_DATA: 
+				stdout.write('.')
+				stdout.flush()
+				sleep(0.2)
+
+	def sndLoop(self):
+		while True:
+			if len(self.destPortList) != 0:
+				idx = randint(0, len(self.destPortList) - 1)
+				# uniform distribution
+				if self.pktCountDict[self.destPortList[idx]] == 0:
+					self.pktCountDict.pop(self.destPortList[idx])
+					self.destPortList.pop(idx)
+				else:
+					self.targetPeer.sendto(MAX_RCV_PKT_DATA, (RCV_Terminal_IP, self.destPortList[idx]), True)
+					stdout.write('~')
+					stdout.flush()
+					self.pktCountDict[self.destPortList[idx]] -= 1
+			else:
+				for i in range(MIN_RCV_PORT_NUM, MIN_RCV_PORT_NUM + MAX_RCV_PEER):
+					self.pktCountDict[i] = int(abs(gauss(AVG_RCV_PKT_NUM, STD_SND_PKT_NUM)))	
+					# normal distribution.
+					self.destPortList.append(i)
+				#print 'Sending OK'
+				#break
+			sleep(expovariate(AVG_RCV_RATE))
 
 	def start(self):
-		targetPeer = rudpSocketDev(TARGET_PEER_PORT)
-		while True:
-			#if randint(0,1):  # 1 => recvfrom
-			if 1:
-				try: 
-					recvData, addr = targetPeer.recvfrom()
-					print len(recvData)
-				except NO_RECV_DATA: 
-					stdout.write('.')
-					stdout.flush()
-					sleep(0.5)
-					continue
-			else:
-				stdout.write('~')
-				stdout.flush()
-				while True:
-					if len(self.activePortList) < MAX_RCV_PEER:
-						try: (nextDestPort, nonsense) = self.destPortDict.popitem(last = False)
-						except KeyError: print '\t Error: fail to get next dest port'
-						self.pktCountDict[str(nextDestPort)] = int(abs(gauss(AVG_RCV_PKT_NUM, STD_SND_PKT_NUM)))
-						self.activePortList.append(nextDestPort)
-						# no. of packets to send
-						break
-					else:
-						activePortId = randint(0, len(self.activePortList) - 1)
-						activePort = self.activePortList[activePortId]
-						if self.pktCountDict[str(activePort)] > 0: 
-							if targetPeer.sendto(MAX_RCV_PKT_DATA, (RCV_Terminal_IP, activePort), isReliable = True):
-								self.pktCountDict[str(activePort)] -= 1
-						else:
-							# The peer has sent out all data to this port.
-							self.destPortDict[str(activePort)] = 1
-							self.activePortList.pop(activePort)
-							self.pktCountDict.popitem(activePort)
-						sleep(0.1)
-						break
-					
-
+		spawn(self.rcvLoop)
+		spawn(self.sndLoop)
+		while True: sleep(0)
 
 if len(argv) == 2:
 	if int(argv[1]) == 1:
-		r = RCVTerminal()
-		r.start()
-	elif int(argv[1])  == 2:
 		s = SNDTerminal()
 		s.start()
+	elif int(argv[1])  == 2:
+		r = RCVTerminal()
+		r.start()
 	elif int(argv[1])  == 3:
 		t = TargetPeer()
 		t.start()
