@@ -32,3 +32,6 @@ class END_CONNECTION:
 		#print '\tconnnection is end'
 		#c.printConnection()
 		pass
+class NO_RECV_DATA:
+	def __init__(self):
+		pass
