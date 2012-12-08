@@ -4,7 +4,7 @@ from time import sleep
 TESTING = True
 #TestCase = (1, '[Handshaking] Server: No SYN for very long time', 'Server: auto shutdown')
 #TestCase = (2, '[Handshaking] Server: pkts with wrong type and id received','Server: ignore')
-#TestCase = (4, '[Handshaking] Client: SYN_ACK with wrong DESTADDR', 'Client: ignore')
+TestCase = (4, '[Handshaking] Client: SYN_ACK with wrong DESTADDR', 'Client: ignore')
 #TestCase = (5, '[Handshaking] Client: SYN_ACK with wrong TYPE or ID', 'Client: "Close"')
 #TestCase = (6, '[Handshaking ~ Data-Delivery] Server: SYN again after last SYN_ACK', 'Server: SYN_ACK / END_TIME_OUT')
 #TestCase = (7, '[Data-Delivery] Client: No ACK for RTO_TIME_OUT / MAX_RESND', 'Client: Re-transmission / "Close"')
@@ -20,7 +20,7 @@ TESTING = True
 #TestCase = (17,'[Shutdown] Server: FIN with wrong ID', 'Server: "End"')
 #TestCase = (18,'[Shutdown] Server: FIN again after last FIN_ACK', 'Server: FIN_ACK / END_TIME_OUT')
 
-TestOn = False
+TestOn = True
 TEST_RCV_PORT = RCV_PORT
 MAX_PKT_SIZE = 100  #  MAX_PKT_SIZE = MAX_DATA - 4
 
