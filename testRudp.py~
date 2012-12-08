@@ -49,7 +49,7 @@ class RCVTerminal():
 			try:
 				for i in range(0, len(self.rcvPeerList)):
 					try: 
-						recvData, addr = self.rcvPeerList[i].recvfrom(False)
+						recvData, addr = self.rcvPeerList[i].recvfrom()
 						stdout.write('o')
 						stdout.flush()
 					except NO_RECV_DATA: continue
@@ -67,7 +67,7 @@ class TargetPeer():
 	def rcvLoop(self):
 		while True:
 			try: 
-				recvData, addr = self.targetPeer.recvfrom(False)
+				recvData, addr = self.targetPeer.recvfrom()
 				stdout.write('o')
 				stdout.flush()
 				sleep(0.0001)
