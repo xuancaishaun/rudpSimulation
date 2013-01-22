@@ -1,14 +1,14 @@
 # Configuration for Sending Terminal
-MAX_SND_PEER = 10
+MAX_SND_PEER = 50
 
 MIN_SND_PORT_NUM = 50500
 MAX_SND_PORT_NUM = MIN_SND_PORT_NUM + 2 * MAX_SND_PEER
 
-MAX_SND_PKT_DATA = 'o' * 1000# in bytes => 10 KB, upper bound for packet size
+MAX_SND_PKT_DATA = 'o' * 1024 # in bytes => 10 KB, upper bound for packet size
 AVG_SND_PKT_NUM  = 100	# Average no. of packets to send for each peer
 STD_SND_PKT_NUM  = 50	# Standard deviation of no. of packets to send for each peer
 
-AVG_SND_RATE = 10	# No. of packets sent per second;
+AVG_SND_RATE = 50	# No. of packets sent per second;
 			# Switching interval follows exponential distribution
 
 '''
@@ -27,7 +27,7 @@ Readme for Sending Terminal
 
 # Configuration for The Target Peer
 TARGET_PEER_PORT = 39951
-TARGET_PEER_IP	 = '127.0.0.1'
+TARGET_PEER_IP	 = '137.189.97.35'
 
 
 RCV_Terminal_IP	 = '127.0.0.1'
