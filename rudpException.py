@@ -11,12 +11,11 @@
 #-------------------#
 # Exceptions        #
 #-------------------#
-class RTO_TIME_OUT(Exception): pass
-class END_TIME_OUT(Exception): pass
+class NO_RECV_DATA(Exception): pass
 class MAX_RESND_FAIL:
-	def __init__(self):
-		print '\ttimeout 3 times:'
-#-------------------#
+	def __init__(self, addr, sendPkt):
+		self.addr = addr
+		print '\ttimeout 3 times', addr
 class ENCODE_DATA_FAIL:
 	def __init__(self, dataToEncode):
 		print '\tencode() fail:', dataToEncode
@@ -26,12 +25,9 @@ class DECODE_DATA_FAIL:
 #-------------------#
 class WRONG_PKT:
 	def __init__(self, func, recvPkt):
-		print '\t', func, recvPkt
+		print '\t', func
 class END_CONNECTION:
 	def __init__(self, c):
 		#print '\tconnnection is end'
 		#c.printConnection()
-		pass
-class NO_RECV_DATA:
-	def __init__(self):
 		pass

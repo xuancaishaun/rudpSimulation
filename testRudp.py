@@ -55,8 +55,7 @@ class RCVTerminal():
 					except NO_RECV_DATA: continue
 			except KeyboardInterrupt:
 				return
-			sleep(0)
-							
+			sleep(0)		
 
 class TargetPeer():	
 	def __init__(self):
@@ -70,11 +69,11 @@ class TargetPeer():
 				recvData, addr = self.targetPeer.recvfrom(False)
 				stdout.write('o')
 				stdout.flush()
-				sleep(0.0001)
+				sleep(0)
 			except NO_RECV_DATA: 
 				stdout.write('.')
 				stdout.flush()
-				sleep(0.2)
+				sleep(0.001)
 
 	def sndLoop(self):
 		while True:
