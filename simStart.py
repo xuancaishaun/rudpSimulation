@@ -5,18 +5,29 @@ from rudpException import *
 from simConfig import *
 from socket import gethostname, gethostbyname
 #Python lib
-from sys import stdout
+from sys import stdout, argv
 from random import random, expovariate, gauss, randint, sample
+import atexit
 
-hosts.remove(gethostbyname(gethostname()))
-hostLength = len(hosts)
-
-print hostLength, hosts
+if LOCAL_TEST:
+	hostLength = LOCAL_PEER_NUM - 1
+	print hostLength
+else:
+	hosts.remove(gethostbyname(gethostname()))
+	hostLength = len(hosts)
+	print hostLength, hosts
 
 class rudpPeer():
 	def __init__(self):
-		self.destList = [(hostname, PEER_PORT) for hostname in hosts]
-		self.socket = rudpSocket(PEER_PORT)
+		if LOCAL_TEST:
+			localPort = PEER_PORT + int(argv[1])
+			if localPort >= PEER_PORT + LOCAL_PEER_NUM:
+				raise Exception('out of range of ports')
+			self.destList = [('127.0.0.1', port) for port in range(PEER_PORT, PEER_PORT + LOCAL_PEER_NUM) if port != localPort]
+			self.socket = rudpSocket(PEER_PORT + int(argv[1]))
+		else:
+			self.destList = [(hostname, PEER_PORT) for hostname in hosts]
+			self.socket = rudpSocket(PEER_PORT)
 
 	def rcvLoop(self):
 		while True:
@@ -25,15 +36,15 @@ class rudpPeer():
 				if not OUTPUT_CLEAN:
 					stdout.write('o')
 					stdout.flush()
-				else:
-					print 'recvData'
+				# else:
+				# 	print 'recvData'
 				sleep(0)
 			except NO_RECV_DATA:
 				if not OUTPUT_CLEAN:
 					stdout.write('.')
 					stdout.flush()
-				else:
-					print 'noData'
+				# else:
+				# 	print 'noData'
 				sleep(0.001)
 
 	def sndLoop(self):
@@ -54,8 +65,8 @@ class rudpPeer():
 				if not OUTPUT_CLEAN:
 					stdout.write('~')
 					stdout.flush()
-				else:
-					print 'sendData'
+				# else:
+				# 	print 'sendData'
 			sleep( expovariate(VAR_SEND_INT) )
 
 	def start(self):
@@ -65,6 +76,10 @@ class rudpPeer():
 
 try:
 	peer = rudpPeer()
+	if RUDP_STAT:
+		atexit.register(peer.socket.rec.printTTL)
 	peer.start()
-except:
+except Exception as e:
+	print e.message
 	del peer
+

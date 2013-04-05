@@ -34,7 +34,7 @@ from gevent.socket import *
 from rudpException import *
 from struct import pack, unpack
 from gevent import sleep, spawn
-from time import time
+from time import time, localtime, strftime
 from Queue import Queue
 from Queue import Empty as QEmpty
 from collections import OrderedDict as oDict
@@ -43,17 +43,112 @@ from collections import OrderedDict as oDict
 #-------------------#
 MAX_DATA  = 10244
 MAX_RESND = 3
-RTO       = 1 		#The retransmission time period
+RTO       = 3 		# The retransmission time period
 SDR_PORT  = 50007
 RCV_PORT  = 50008	# 50000-50010
 MAX_PKTID = 0xffffff
-#MAX_PKTID = 10
 MAX_CONN  = 1000
 ACK_LMT   = 100
 DAT = 0x40000000
 ACK = 0x20000000
 REL = 0x01000000
-	
+#-------------------#
+# RUDP MODE         #
+#-------------------#
+RUDP_DEBUG = False
+RUDP_LOG   = False
+RUDP_STAT  = True
+STAT_PKTS  = 50
+class Logger():
+	def __init__(self, f = None):
+		self.initTime = time();
+		if f:
+			self.f = f
+		else:
+			self.f = open('rudp_log_' + str(int(time())) + '.txt', 'a')
+		self.logWriteLine( 'NEW_SOCKET', strftime("%a, %d %b %Y %H:%M:%S +0000", localtime()) )
+	def __del__(self):
+		self.logWriteLine( 'END_SOCKET', strftime("%a, %d %b %Y %H:%M:%S +0000", localtime()) )
+		self.f.close()
+	def logWriteLine(self, option, *data):
+		data = [str(time() - self.initTime), option] + list(data)
+		self.f.write( ' '.join(str(i) for i in data) + '\n' )
+
+class Recorder():
+	def __init__(self, pkt_period = STAT_PKTS):
+		self.lastTime = time()
+		self.perStat  = {}  # addr  => [sendpkt_num, sendbyte_num, recvpkt_num, recvbyte_num, retransmit_num]
+		self.ttlStat  = {'ttl': [0, [0] * 5]}	# addr  => [sendpkt_num, sendbyte_num, recvpkt_num, recvbyte_num, retransmit_num]
+		self.timeStat = []  # index => [timestamp, perStat]
+		self.ttlTime  = 0
+		self.period   = pkt_period if pkt_period else STAT_PKTS
+		self.onperiod = 0
+	def updateSend(self, addr, length):
+		if addr not in self.perStat:
+			self.perStat[addr] = [0] * 5
+		self.perStat[addr][0] += 1
+		if length >= 0:
+			self.perStat[addr][1] += length
+		self.onperiod += 1
+		if self.onperiod == self.period:
+			self.updateOnTime()
+			self.onperiod = 0
+	def updateRecv(self, addr, length):
+		if addr not in self.perStat:
+			self.perStat[addr] = [0] * 5
+		self.perStat[addr][2] += 1
+		if length >= 0:
+			self.perStat[addr][3] += length
+		self.onperiod += 1
+		if self.onperiod == self.period:
+			self.updateOnTime()
+			self.onperiod = 0
+	def updateLoss(self, addr):
+		if addr not in self.perStat:
+			self.perStat[addr] = [0] * 5
+		self.perStat[addr][4] += 1
+	def updateOnTime(self):
+		perTime = time() - self.lastTime
+		self.timeStat.append([perTime, self.perStat])
+		self.lastTime = time()
+		self.ttlStat['ttl'][0] += perTime
+		lastTTLStat = self.ttlStat['ttl'][1]
+		for addr, value in self.perStat.iteritems():
+			lastTTLStat = [sum(a) for a in zip(lastTTLStat, value)]
+			if addr in self.ttlStat:
+				self.ttlStat[addr] = [sum(a) for a in zip(self.ttlStat[addr], value)]
+			else:
+				self.ttlStat[addr] = value
+		self.ttlStat['ttl'][1] = lastTTLStat
+		self.perStat = {}
+		self.printPeriod()
+	def printPeriod(self):
+		print '\n==o==\n'
+		perTime = self.timeStat[-1][0]
+		for addr, stat in self.timeStat[-1][1].iteritems():
+			print addr, '=>'
+			rate = [ '%0.2f' % (i / perTime) for i in stat[:4]]
+			print '\tSend rate:', rate[0], 'P/s', rate[1], 'B/s'
+			print '\tRecv rate:', rate[2], 'P/s', rate[3], 'B/s'
+			print '\tPktl rate:', int((stat[4] / (stat[0] + stat[2])) * 100), '%'
+		print 'All:'
+		ttlTime = self.ttlStat['ttl'][0]
+		stat = self.ttlStat['ttl'][1]
+		rate = [ '%0.2f' % (i / ttlTime) for i in stat[:4]]
+		print '\tSend rate:', rate[0], 'P/s', rate[1], 'B/s'
+		print '\tRecv rate:', rate[2], 'P/s', rate[3], 'B/s'
+		print '\tPktl rate:', int((stat[4] / (stat[0] + stat[2])) * 100), '%'
+		print '\n==x==\n'
+	def printTTL(self):
+		print '\n==o==\n'
+		# print 'Periodic stat:'
+		# for stat in self.timeStat:
+		# 	print '\t', str(stat)
+		print 'Total stat:'
+		for addr, stat in self.ttlStat.iteritems():
+			print '\t', addr, '=>', stat 
+		print '\n==x==\n'
+
 #-------------------#
 # RUDP              #
 #-------------------#
@@ -74,7 +169,7 @@ def decode(bitStr):
 		raise DECODE_DATA_FAIL()
 	else:
 		header  = unpack('i', bitStr[:4])[0]
-		return rudpPacket(header & 0x70000000, header & 0x00ffffff, header & REL, bitStr[4:])
+		return rudpPacket(header & 0x7e000000, header & 0x00ffffff, header & REL, bitStr[4:])
 
 #-------------------#
 # DataStructure     #
@@ -122,7 +217,7 @@ class ListDict():
 #-------------------#
 # RUDP Socket       #
 #-------------------#
-class rudpSocket():
+class rudpSocket(object):
 	def __init__(self, srcPort):
 	#UDP socket
 		self.skt  = socket(AF_INET, SOCK_DGRAM) #UDP
@@ -139,9 +234,20 @@ class rudpSocket():
 		sleep(0)
 	#failed Connections
 		self.failed = []
+	#write log
+		if RUDP_LOG:
+			self.log = Logger()
+	#stat
+		if RUDP_STAT:
+			self.rec = Recorder()
 
 	def __del__(self):
 		self.skt.close()
+		if RUDP_LOG:
+			del self.log
+		if RUDP_STAT:
+			self.rec.printTTL()
+		
 
 	def recvLoop(self):
 		while True:
@@ -150,9 +256,6 @@ class rudpSocket():
 		#type
 			if recvPkt['type'] == DAT: self.proDAT(recvPkt, addr)
 			elif recvPkt['type'] == ACK: self.proACK(recvPkt, addr)
-			else:
-				sleep(0) 
-				continue
 			#except Exception as e:
 			#	print e.message
 			sleep(0)
@@ -171,7 +274,13 @@ class rudpSocket():
 				#update resendNum
 					#print 'timeout', key[1][0], triple[2]['id']
 					triple[1] += 1
+					if RUDP_LOG:
+						self.log.logWriteLine('LOSS', key[1], key[0])
+					if RUDP_STAT:
+						self.rec.updateLoss(key[1])
 					if triple[1] == 3: 
+						if RUDP_LOG:
+							self.log.logWriteLine('CON_FAIL', key[1])
 					#remove from notAcked
 						del self.notACKed[key]
 					#remove from nextId
@@ -191,12 +300,6 @@ class rudpSocket():
 			sleep(timeToWait)
 
 	def proDAT(self, recvPkt, addr):
-		'''
-		try:
-			print self.expId.list[-1]
-		except: 
-			print 'T_T'
-		'''
 	#not rel
 		if not recvPkt['rel']: self.datPkts.put((recvPkt, addr))
 	#rel
@@ -210,6 +313,8 @@ class rudpSocket():
 			#initiate + replacement
 				if pktId == 0:
 					self.expId.newItem(addr, [1])
+					if RUDP_LOG:
+						self.log.logWriteLine('NEW_RECEIVER', addr)
 				else: return
 			else:
 				try:
@@ -242,6 +347,8 @@ class rudpSocket():
 			#print (recvPkt['id'], addr), 'ACK received'
 			#print recvPkt['id'], addr
 			del self.notACKed[(recvPkt['id'], addr)]
+			if RUDP_LOG:
+				self.log.logWriteLine('ACK', addr, recvPkt['id'])
 		except KeyError:
 			#print 'proACK Fail' 
 			return 
@@ -254,11 +361,17 @@ class rudpSocket():
 		try:
 			nextId = self.nextId[destAddr][1]
 		except KeyError:
+			if RUDP_LOG:
+				self.log.logWriteLine('NEW_SENDER', destAddr)
 			self.nextId.newItem(destAddr, 0)
 			nextId = 0
 	#pkt
 		sendPkt = rudpPacket(DAT, nextId, isReliable, string)
 	#send pkt
+		if RUDP_LOG:
+			self.log.logWriteLine('SEND', destAddr, len(sendPkt['data']))
+		if RUDP_STAT:
+			self.rec.updateSend(destAddr, len(sendPkt['data']))
 		ret = self.skt.sendto( encode(sendPkt), destAddr )
 		nextId += 1
 		if nextId > MAX_PKTID: nextId = 0
@@ -272,6 +385,10 @@ class rudpSocket():
 		while True:
 			try:
 				recvPkt, addr = self.datPkts.get_nowait() #Non-blocking
+				if RUDP_LOG:
+					self.log.logWriteLine('RECV', addr, len(recvPkt['data']))
+				if RUDP_STAT:
+					self.rec.updateRecv(addr, len(recvPkt['data']))
 				break
 			except QEmpty:
 				#print 'no data'

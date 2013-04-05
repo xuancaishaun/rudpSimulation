@@ -17,7 +17,7 @@ hosts = [
 	'202.125.215.12'
 ]
 
-#We use the first three hosts
+#We use the first two hosts
 hosts = hosts[:2]
 
 # Specific port for both sending and receiving data
@@ -25,15 +25,19 @@ PEER_PORT = 39951
 
 # Inter-sending interval for a peer
 # E.g. 
-VAR_SEND_INT = 10	# gamma; exponential distri.
+VAR_SEND_INT = 100	# gamma; exponential distri.
 
 # Prob. of sending reliable messages
 VAR_SEND_REL = 0.7	# uniform distri.
 
 # Message size follows normal distri.
 # E.g. int(abs(gauss( average, std. )))
-VAR_MSG_AVG = 10240
+VAR_MSG_AVG = 1024
 VAR_MSG_STD = 100
 
 # Flag for output printing 
-OUTPUT_CLEAN = False 
+OUTPUT_CLEAN = True 
+
+# Local testing
+LOCAL_TEST = False
+LOCAL_PEER_NUM = 4
