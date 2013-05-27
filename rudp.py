@@ -57,8 +57,8 @@ REL = 0x01000000
 #-------------------#
 RUDP_DEBUG = False
 RUDP_LOG   = False
-RUDP_STAT  = False
-STAT_PKTS  = 50
+RUDP_STAT  = True
+STAT_PKTS  = 200
 class Logger():
 	def __init__(self, f = None):
 		self.initTime = time();
