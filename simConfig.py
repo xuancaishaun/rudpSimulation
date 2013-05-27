@@ -1,14 +1,18 @@
 hostnames = [
 	"ricepl-1.cs.rice.edu",
 	"planet3.cs.ucsb.edu",
-	"planetlab-01.vt.nodes.planet-lab.org",
-	"planetlab2-santiago.lan.redclara.net"
+	#"planetlab-01.vt.nodes.planet-lab.org",
+	#"planetlab2-santiago.lan.redclara.net"
+	"planetlab2.cs.uoregon.edu",
+	"planetlab01.alucloud.com"
 ]
 hosts = [
 	"128.42.142.41",
 	"128.111.52.63",
-	"198.82.160.238",
-	"200.0.206.203"
+	#"198.82.160.238",
+	#"200.0.206.203"
+	"128.223.8.112",
+	"135.109.221.103"
 ]
 
 #We use the first two hosts
