@@ -34,7 +34,7 @@ VAR_MSG_AVG = 1024
 VAR_MSG_STD = 100
 
 # Flag for output printing 
-OUTPUT_CLEAN = True 
+OUTPUT_CLEAN = False 
 
 # Local testing
 LOCAL_TEST = False
